@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AttendIQ — QR Attendance System</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* Red + Off-white theme */
+  --red:        #e63946;
+  --red-deep:   #c1121f;
+  --red-glow:   rgba(230, 57, 70, 0.45);
+  --red-soft:   rgba(230, 57, 70, 0.15);
+  --red-border: rgba(230, 57, 70, 0.35);
+  --offwhite:   #f5f0eb;
+  --cream:      #faf7f2;
+  --warm-white: rgba(245, 240, 235, 0.92);
+
+  --glass-bg:     rgba(245, 240, 235, 0.09);
+  --glass-border: rgba(245, 240, 235, 0.22);
+  --glass-shadow: 0 8px 40px rgba(0,0,0,0.35);
+  --glass-blur:   blur(20px);
+
+  --text:       #f5f0eb;
+  --text-muted: rgba(245, 240, 235, 0.6);
+  --text-dim:   rgba(245, 240, 235, 0.35);
+
+  --radius:    20px;
+  --radius-sm: 12px;
+  --font:  'Outfit', sans-serif;
+  --mono:  'Space Mono', monospace;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font);
+  background: #1a0508;
+  background: linear-gradient(135deg, #1a0508 0%, #2d0a10 30%, #1c0b14 60%, #0f0304 100%);
+  min-height: 100vh;
+  color: var(--text);
+  overflow-x: hidden;
+}
+
+/* Animated orbs — red palette */
+.bg-orbs { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+.orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.3; animation: floatOrb 14s ease-in-out infinite; }
+.orb-1 { width: 550px; height: 550px; background: #e63946; top: -180px; left: -180px; animation-delay: 0s; }
+.orb-2 { width: 420px; height: 420px; background: #9b2226; bottom: -100px; right: -120px; animation-delay: 5s; }
+.orb-3 { width: 320px; height: 320px; background: #c1121f; top: 45%; left: 38%; animation-delay: 9s; opacity: 0.2; }
+
+@keyframes floatOrb {
+  0%,100% { transform: translate(0,0) scale(1); }
+  33%      { transform: translate(35px,-45px) scale(1.06); }
+  66%      { transform: translate(-25px,25px) scale(0.96); }
+}
+
+/* Layout */
+.app-wrapper { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+
+/* Glass */
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+  border-radius: var(--radius);
+}
+
+/* ---- HEADER ---- */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 28px; margin-bottom: 28px; flex-wrap: wrap; gap: 12px;
+}
+.logo { display: flex; align-items: center; gap: 12px; }
+.logo-icon {
+  width: 44px; height: 44px;
+  background: linear-gradient(135deg, var(--red), var(--red-deep));
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  box-shadow: 0 4px 18px var(--red-glow);
+}
+.logo h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.4px; color: var(--offwhite); }
+.logo span { color: var(--red); }
+
+.user-badge {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(245,240,235,0.07);
+  border: 1px solid rgba(245,240,235,0.14);
+  border-radius: 40px; padding: 6px 16px 6px 6px;
+}
+.avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--red), var(--red-deep));
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 0.75rem; color: var(--offwhite);
+  box-shadow: 0 2px 10px var(--red-glow);
+}
+.user-name-text { font-weight: 600; font-size: 0.88rem; color: var(--offwhite); }
+.user-role { color: var(--red); font-weight: 600; font-size: 0.75rem; }
+
+.btn-logout {
+  background: rgba(230,57,70,0.12);
+  border: 1px solid var(--red-border);
+  color: var(--red); padding: 7px 16px; border-radius: 40px;
+  cursor: pointer; font-family: var(--font); font-size: 0.82rem; font-weight: 500;
+  transition: all 0.2s;
+}
+.btn-logout:hover { background: rgba(230,57,70,0.25); }
+
+/* ---- PAGES ---- */
+.page { display: none; }
+.page.active { display: block; }
+
+/* ---- AUTH ---- */
+.auth-wrap {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 82vh; padding: 20px;
+}
+.auth-card { width: 100%; max-width: 450px; padding: 44px 36px; text-align: center; }
+
+.auth-logo-row { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 6px; }
+.auth-logo-icon {
+  width: 52px; height: 52px;
+  background: linear-gradient(135deg, var(--red), var(--red-deep));
+  border-radius: 14px; font-size: 26px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 24px var(--red-glow);
+}
+.auth-card h2 { font-size: 1.9rem; font-weight: 700; color: var(--offwhite); margin-bottom: 4px; }
+.auth-card .subtitle { color: var(--text-muted); margin-bottom: 30px; font-size: 0.92rem; }
+
+/* Red accent line under title */
+.auth-divider {
+  width: 48px; height: 3px;
+  background: linear-gradient(90deg, var(--red), var(--red-deep));
+  border-radius: 4px; margin: 10px auto 28px;
+}
+
+.role-tabs {
+  display: flex; gap: 6px;
+  background: rgba(0,0,0,0.25);
+  border-radius: 12px; padding: 5px; margin-bottom: 22px;
+}
+.role-tab {
+  flex: 1; padding: 10px; border-radius: 9px;
+  border: none; cursor: pointer;
+  font-family: var(--font); font-size: 0.9rem; font-weight: 500;
+  background: transparent; color: var(--text-muted); transition: all 0.25s;
+}
+.role-tab.active {
+  background: linear-gradient(135deg, var(--red), var(--red-deep));
+  color: var(--offwhite);
+  box-shadow: 0 4px 18px var(--red-glow);
+}
+
+.form-group { margin-bottom: 15px; text-align: left; }
+.form-group label { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; display: block; font-weight: 500; letter-spacing: 0.3px; }
+.form-group input {
+  width: 100%; padding: 12px 16px;
+  background: rgba(245,240,235,0.07);
+  border: 1px solid rgba(245,240,235,0.14);
+  border-radius: var(--radius-sm); color: var(--offwhite);
+  font-family: var(--font); font-size: 0.95rem; outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+.form-group input:focus {
+  border-color: var(--red);
+  background: rgba(230,57,70,0.08);
+  box-shadow: 0 0 0 3px rgba(230,57,70,0.12);
+}
+.form-group input::placeholder { color: var(--text-dim); }
+
+.btn-primary {
+  width: 100%; padding: 14px;
+  background: linear-gradient(135deg, var(--red), var(--red-deep));
+  border: none; border-radius: var(--radius-sm);
+  color: var(--offwhite); font-family: var(--font);
+  font-size: 1rem; font-weight: 600; cursor: pointer;
+  transition: all 0.22s;
+  box-shadow: 0 4px 22px var(--red-glow);
+  margin-top: 8px; letter-spacing: 0.3px;
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 30px var(--red-glow); }
+.btn-primary:active { transform: translateY(0); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.auth-toggle { margin-top: 18px; font-size: 0.88rem; color: var(--text-muted); }
+.auth-toggle a { color: var(--red); cursor: pointer; font-weight: 600; }
+.auth-toggle a:hover { text-decoration: underline; }
+
+.msg { margin-top: 14px; padding: 10px 14px; border-radius: 10px; font-size: 0.87rem; }
+.msg.error { background: rgba(230,57,70,0.13); border: 1px solid var(--red-border); color: #fca5a5; }
+.msg.success { background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.3); color: #6ee7b7; }
+
+/* storage info badge */
+.storage-info {
+  margin-top: 14px; padding: 8px 14px;
+  background: rgba(245,240,235,0.05);
+  border: 1px solid rgba(245,240,235,0.1);
+  border-radius: 8px; font-size: 0.78rem; color: var(--text-dim);
+}
+.storage-info span { color: var(--red); font-weight: 600; }
+
+/* ---- DASHBOARD ---- */
+.dash-nav { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+.nav-tab {
+  padding: 10px 20px; border-radius: 40px;
+  border: 1px solid rgba(245,240,235,0.14);
+  background: rgba(245,240,235,0.05);
+  color: var(--text-muted); font-family: var(--font);
+  font-size: 0.88rem; font-weight: 500; cursor: pointer; transition: all 0.2s;
+}
+.nav-tab.active {
+  background: linear-gradient(135deg, var(--red), var(--red-deep));
+  border-color: transparent; color: var(--offwhite);
+  box-shadow: 0 4px 18px var(--red-glow);
+}
+.nav-tab:hover:not(.active) { background: rgba(245,240,235,0.1); color: var(--offwhite); }
+
+.dash-section { display: none; }
+.dash-section.active { display: block; }
+
+/* Stats */
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 14px; margin-bottom: 24px; }
+.stat-card { padding: 22px; text-align: center; }
+.stat-num { font-size: 2.1rem; font-weight: 700; font-family: var(--mono); }
+.stat-num.red   { color: var(--red); text-shadow: 0 0 20px var(--red-glow); }
+.stat-num.cream { color: var(--offwhite); }
+.stat-num.warm  { color: #f4a261; }
+.stat-label { font-size: 0.78rem; color: var(--text-muted); margin-top: 5px; letter-spacing: 0.5px; }
+
+/* QR Generator */
+.qr-section { padding: 30px 32px; }
+.qr-section h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 20px; color: var(--offwhite); }
+
+.qr-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 16px; margin-bottom: 24px; }
+.select-wrap label { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; display: block; font-weight: 500; }
+.select-wrap select {
+  width: 100%; padding: 12px 16px;
+  background: rgba(245,240,235,0.07);
+  border: 1px solid rgba(245,240,235,0.14);
+  border-radius: var(--radius-sm); color: var(--offwhite);
+  font-family: var(--font); font-size: 0.9rem; outline: none; cursor: pointer; appearance: none;
+  transition: border-color 0.2s;
+}
+.select-wrap select:focus { border-color: var(--red); }
+.select-wrap select option { background: #2d0a10; color: var(--offwhite); }
+
+.qr-display-area {
+  display: flex; flex-direction: column; align-items: center; gap: 18px;
+  padding: 32px;
+  background: rgba(245,240,235,0.04);
+  border: 1px dashed rgba(245,240,235,0.14);
+  border-radius: var(--radius);
+  min-height: 280px; justify-content: center;
+}
+#qr-code-box canvas, #qr-code-box img {
+  border-radius: 12px; padding: 14px; background: #f5f0eb;
+  box-shadow: 0 4px 28px rgba(0,0,0,0.4);
+}
+.qr-timer { font-family: var(--mono); font-size: 2.2rem; font-weight: 700; color: var(--offwhite); letter-spacing: 2px; }
+.qr-timer.warning { color: var(--red); animation: timerPulse 0.7s ease-in-out infinite; }
+@keyframes timerPulse { 0%,100%{opacity:1} 50%{opacity:0.45} }
+
+.qr-session-id {
+  font-family: var(--mono); font-size: 0.78rem; color: var(--text-muted);
+  background: rgba(0,0,0,0.3); padding: 6px 16px; border-radius: 40px; letter-spacing: 2px;
+}
+.qr-placeholder { text-align: center; color: var(--text-muted); }
+.qr-placeholder .icon { font-size: 3rem; margin-bottom: 10px; opacity: 0.5; }
+
+.btn-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
+.btn-glass {
+  flex: 1; min-width: 130px; padding: 12px 20px;
+  background: rgba(245,240,235,0.07);
+  border: 1px solid rgba(245,240,235,0.16);
+  border-radius: 12px; color: var(--offwhite);
+  font-family: var(--font); font-size: 0.9rem; font-weight: 500;
+  cursor: pointer; transition: all 0.2s; text-align: center;
+}
+.btn-glass:hover { background: rgba(245,240,235,0.15); transform: translateY(-1px); }
+.btn-glass.red-btn {
+  background: rgba(230,57,70,0.14);
+  border-color: var(--red-border); color: var(--red);
+}
+.btn-glass.red-btn:hover { background: rgba(230,57,70,0.26); }
+.btn-glass.accent {
+  background: linear-gradient(135deg, var(--red), var(--red-deep));
+  border-color: transparent; color: var(--offwhite);
+  box-shadow: 0 4px 18px var(--red-glow);
+}
+.btn-glass.accent:hover { box-shadow: 0 8px 28px var(--red-glow); }
+
+/* Scanner */
+.scanner-wrap { padding: 30px 32px; }
+.scanner-wrap h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 8px; color: var(--offwhite); }
+.scanner-wrap .desc { color: var(--text-muted); margin-bottom: 20px; font-size: 0.9rem; }
+#qr-reader { border-radius: var(--radius-sm); overflow: hidden; max-width: 420px; margin: 0 auto; }
+
+.scan-result { margin-top: 20px; padding: 20px; border-radius: var(--radius-sm); display: none; text-align: center; }
+.scan-result.success { background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.3); }
+.scan-result.error   { background: rgba(230,57,70,0.1);  border: 1px solid var(--red-border); }
+.scan-result-icon { font-size: 2.2rem; margin-bottom: 8px; }
+.scan-result h4 { font-size: 1rem; font-weight: 600; margin-bottom: 4px; color: var(--offwhite); }
+.scan-result p  { font-size: 0.87rem; color: var(--text-muted); }
+
+/* Records */
+.records-wrap { padding: 30px 32px; }
+.records-wrap h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 18px; color: var(--offwhite); }
+.filter-row { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+.filter-row input, .filter-row select {
+  padding: 10px 14px; flex: 1; min-width: 140px;
+  background: rgba(245,240,235,0.07);
+  border: 1px solid rgba(245,240,235,0.14);
+  border-radius: 10px; color: var(--offwhite);
+  font-family: var(--font); font-size: 0.88rem; outline: none;
+}
+.filter-row input::placeholder { color: var(--text-dim); }
+.filter-row select option { background: #2d0a10; }
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; min-width: 480px; }
+th { padding: 12px 16px; text-align: left; font-size: 0.72rem; font-weight: 600; letter-spacing: 1px; color: var(--text-muted); border-bottom: 1px solid rgba(245,240,235,0.1); text-transform: uppercase; }
+td { padding: 14px 16px; border-bottom: 1px solid rgba(245,240,235,0.05); vertical-align: middle; }
+tr:hover td { background: rgba(230,57,70,0.05); }
+
+.badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 40px; font-size: 0.74rem; font-weight: 600; }
+.badge-present { background: rgba(52,211,153,0.13); color: #34d399; border: 1px solid rgba(52,211,153,0.28); }
+.badge-class   { background: rgba(230,57,70,0.13); color: #f87171; border: 1px solid var(--red-border); }
+
+.empty-state { text-align: center; padding: 48px 20px; color: var(--text-muted); }
+.empty-state .icon { font-size: 2.5rem; margin-bottom: 10px; opacity: 0.45; }
+
+/* Toast */
+.toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  padding: 13px 18px;
+  background: rgba(26, 5, 8, 0.92);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(245,240,235,0.15);
+  border-left: 3px solid var(--red);
+  border-radius: 12px; font-size: 0.87rem; color: var(--offwhite);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  animation: slideInToast 0.3s ease;
+  max-width: 310px;
+}
+@keyframes slideInToast { from{opacity:0;transform:translateX(30px)} to{opacity:1;transform:translateX(0)} }
+
+/* Responsive */
+@media (max-width: 600px) {
+  .header { padding: 13px 14px; }
+  .qr-section, .scanner-wrap, .records-wrap { padding: 18px 14px; }
+  .auth-card { padding: 28px 18px; }
+  .qr-timer { font-size: 1.7rem; }
+  td, th { padding: 10px 10px; }
+  .toast-container { left: 14px; right: 14px; }
+  .btn-row { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<div class="bg-orbs">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+</div>
+
+<div class="app-wrapper">
+
+  <!-- HEADER -->
+  <header class="header glass" id="main-header" style="display:none;">
+    <div class="logo">
+      <div class="logo-icon">📡</div>
+      <h1>Attend<span>IQ</span></h1>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div class="user-badge" id="user-badge">
+        <div class="avatar" id="user-avatar">?</div>
+        <div>
+          <div class="user-name-text" id="user-name">—</div>
+          <div class="user-role" id="user-role-label">—</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="logout()">Sign Out</button>
+    </div>
+  </header>
+
+  <!-- AUTH PAGE -->
+  <div class="page active" id="page-auth">
+    <div class="auth-wrap">
+      <div class="auth-card glass">
+        <div class="auth-logo-row">
+          <div class="auth-logo-icon">📡</div>
+        </div>
+        <h2>AttendIQ</h2>
+        <p class="subtitle">Smart QR Attendance System</p>
+        <div class="auth-divider"></div>
+
+        <div class="role-tabs">
+          <button class="role-tab active" onclick="setRole('teacher',this)">👩‍🏫 Teacher</button>
+          <button class="role-tab" onclick="setRole('student',this)">🎒 Student</button>
+        </div>
+
+        <div class="form-group">
+          <label>Email Address</label>
+          <input type="email" id="auth-email" placeholder="you@school.edu" />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="auth-password" placeholder="••••••••" />
+        </div>
+        <div class="form-group" id="name-field" style="display:none;">
+          <label>Full Name</label>
+          <input type="text" id="auth-name" placeholder="Your full name" />
+        </div>
+
+        <button class="btn-primary" id="auth-btn" onclick="handleAuth()">Sign In</button>
+        <div id="auth-msg"></div>
+
+        <div class="storage-info" id="storage-info-box">
+          Sign in uses <span>sessionStorage</span> (cleared on tab close)
+        </div>
+
+        <div class="auth-toggle">
+          <span id="auth-toggle-text">Don't have an account?</span>
+          <a onclick="toggleAuthMode()"><span id="auth-toggle-link"> Create one</span></a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD PAGE -->
+  <div class="page" id="page-dashboard">
+    <div class="stats-row" id="stats-row"></div>
+    <div class="dash-nav" id="dash-nav"></div>
+
+    <!-- Teacher: Generate QR -->
+    <div class="dash-section glass" id="section-generate">
+      <div class="qr-section">
+        <h3>📲 Generate Attendance QR</h3>
+        <div class="qr-controls">
+          <div class="select-wrap">
+            <label>Subject / Class</label>
+            <select id="subject-select">
+              <option value="">Select subject...</option>
+              <option>Mathematics</option><option>Physics</option>
+              <option>Chemistry</option><option>Computer Science</option>
+              <option>English</option><option>Biology</option><option>History</option>
+            </select>
+          </div>
+          <div class="select-wrap">
+            <label>QR Validity</label>
+            <select id="validity-select">
+              <option value="120">2 minutes</option>
+              <option value="300" selected>5 minutes</option>
+              <option value="600">10 minutes</option>
+              <option value="900">15 minutes</option>
+            </select>
+          </div>
+        </div>
+        <div class="qr-display-area" id="qr-display-area">
+          <div class="qr-placeholder">
+            <div class="icon">🔲</div>
+            <div>Select a subject and click Generate</div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn-glass accent" onclick="generateQR()">⚡ Generate QR</button>
+          <button class="btn-glass red-btn" onclick="stopQR()" id="stop-btn" style="display:none;">⏸ Stop Session</button>
+          <button class="btn-glass" onclick="downloadQR()">⬇ Download QR</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Student: Scan QR -->
+    <div class="dash-section glass" id="section-scan">
+      <div class="scanner-wrap">
+        <h3>📷 Scan QR Code</h3>
+        <p class="desc">Point your camera at the teacher's QR code to mark attendance.</p>
+        <div id="qr-reader"></div>
+        <div class="scan-result" id="scan-result">
+          <div class="scan-result-icon" id="scan-icon">✅</div>
+          <h4 id="scan-title">Attendance Marked!</h4>
+          <p id="scan-detail">Your attendance has been recorded.</p>
+        </div>
+        <div class="btn-row" style="margin-top:20px;">
+          <button class="btn-glass accent" onclick="startScanner()">📷 Start Camera</button>
+          <button class="btn-glass red-btn" onclick="stopScanner()">✕ Stop Camera</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Records -->
+    <div class="dash-section glass" id="section-records">
+      <div class="records-wrap">
+        <h3>📋 Attendance Records</h3>
+        <div class="filter-row">
+          <input type="text" id="search-filter" placeholder="🔍 Search student..." oninput="filterRecords()" />
+          <select id="subject-filter" onchange="filterRecords()">
+            <option value="">All Subjects</option>
+            <option>Mathematics</option><option>Physics</option>
+            <option>Chemistry</option><option>Computer Science</option>
+            <option>English</option><option>Biology</option><option>History</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Student</th><th>Subject</th><th>Date & Time</th><th>Status</th></tr>
+            </thead>
+            <tbody id="records-tbody">
+              <tr><td colspan="4"><div class="empty-state"><div class="icon">📭</div><div>No records yet</div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /page-dashboard -->
+</div><!-- /app-wrapper -->
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+// ============================================================
+// FIREBASE CONFIG — replace these values after Firebase setup
+// ============================================================
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+// Set to false after filling in firebaseConfig above
+const DEMO_MODE = true;
+
+let db, auth;
+if (!DEMO_MODE) {
+  firebase.initializeApp(firebaseConfig);
+  auth  = firebase.auth();
+  db    = firebase.firestore();
+}
+
+// ============================================================
+// STATE
+// ============================================================
+let currentUser  = null;
+let currentRole  = 'teacher';
+let isSignUp     = false;
+let qrInterval   = null;
+let activeSession= null;
+let html5QrCode  = null;
+let allRecords   = [];
+
+// ============================================================
+// LOCAL STORAGE KEY CONSTANTS
+// ============================================================
+const LS_USERS_KEY     = 'attendiq_users';      // localStorage — all registered users
+const SS_STUDENT_KEY   = 'attendiq_student_session'; // sessionStorage — active student session
+const LS_TEACHER_KEY   = 'attendiq_teacher_session'; // localStorage  — active teacher session
+const LS_ATTENDANCE    = 'attendiq_attendance'; // localStorage — all attendance records
+
+// ============================================================
+// DEMO DATA
+// ============================================================
+const demoRecords = [
+  { id:1, studentName:'Priya Sharma',   subject:'Mathematics',    timestamp: new Date(Date.now()-3600000), status:'Present' },
+  { id:2, studentName:'Rahul Verma',    subject:'Physics',        timestamp: new Date(Date.now()-7200000), status:'Present' },
+  { id:3, studentName:'Ananya Patel',   subject:'Computer Science', timestamp: new Date(Date.now()-1800000), status:'Present' },
+  { id:4, studentName:'Karan Singh',    subject:'Mathematics',    timestamp: new Date(Date.now()-5400000), status:'Present' },
+  { id:5, studentName:'Meera Joshi',    subject:'Chemistry',      timestamp: new Date(Date.now()-900000),  status:'Present' },
+];
+
+// ============================================================
+// STORAGE HELPERS
+// ============================================================
+function getRegisteredUsers() {
+  try { return JSON.parse(localStorage.getItem(LS_USERS_KEY)) || []; }
+  catch { return []; }
+}
+function saveRegisteredUsers(users) {
+  localStorage.setItem(LS_USERS_KEY, JSON.stringify(users));
+}
+function getAttendanceRecords() {
+  try { return JSON.parse(localStorage.getItem(LS_ATTENDANCE)) || []; }
+  catch { return []; }
+}
+function saveAttendanceRecords(records) {
+  localStorage.setItem(LS_ATTENDANCE, JSON.stringify(records));
+}
+function saveTeacherSession(user) {
+  // Teachers stay logged in across tabs (localStorage)
+  localStorage.setItem(LS_TEACHER_KEY, JSON.stringify(user));
+}
+function saveStudentSession(user) {
+  // Students: sessionStorage — clears when tab closes
+  sessionStorage.setItem(SS_STUDENT_KEY, JSON.stringify(user));
+}
+function clearSessions() {
+  localStorage.removeItem(LS_TEACHER_KEY);
+  sessionStorage.removeItem(SS_STUDENT_KEY);
+}
+
+// ============================================================
+// AUTH
+// ============================================================
+function setRole(role, el) {
+  currentRole = role;
+  document.querySelectorAll('.role-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  updateStorageInfo();
+}
+
+function updateStorageInfo() {
+  const box = document.getElementById('storage-info-box');
+  if (isSignUp) {
+    box.innerHTML = 'Registration saves to <span>localStorage</span> (persists across sessions)';
+  } else if (currentRole === 'teacher') {
+    box.innerHTML = 'Teacher login uses <span>localStorage</span> (stays logged in)';
+  } else {
+    box.innerHTML = 'Student login uses <span>sessionStorage</span> (cleared on tab close)';
+  }
+}
+
+function toggleAuthMode() {
+  isSignUp = !isSignUp;
+  document.getElementById('auth-btn').textContent        = isSignUp ? 'Create Account' : 'Sign In';
+  document.getElementById('auth-toggle-link').textContent = isSignUp ? ' Sign in instead' : ' Create one';
+  document.getElementById('auth-toggle-text').textContent = isSignUp ? 'Already have an account?' : "Don't have an account?";
+  document.getElementById('name-field').style.display    = isSignUp ? 'block' : 'none';
+  document.getElementById('auth-msg').innerHTML          = '';
+  updateStorageInfo();
+}
+
+async function handleAuth() {
+  const email    = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const name     = document.getElementById('auth-name').value.trim();
+  const btn      = document.getElementById('auth-btn');
+
+  if (!email || !password) { showMsg('Please fill in all fields.', 'error'); return; }
+
+  btn.disabled    = true;
+  btn.textContent = 'Please wait…';
+
+  // ---- DEMO MODE: local storage auth ----
+  if (DEMO_MODE) {
+    await new Promise(r => setTimeout(r, 600));
+
+    if (isSignUp) {
+      if (!name) { showMsg('Please enter your full name.', 'error'); btn.disabled=false; btn.textContent='Create Account'; return; }
+      const users = getRegisteredUsers();
+      if (users.find(u => u.email === email)) {
+        showMsg('Email already registered. Sign in instead.', 'error');
+        btn.disabled=false; btn.textContent='Create Account'; return;
+      }
+      const newUser = { uid: 'uid_' + Date.now(), email, password, name, role: currentRole };
+      users.push(newUser);
+      saveRegisteredUsers(users); // <-- localStorage
+      toast('✅ Account created! You can now sign in.');
+      showMsg('Account created! Please sign in.', 'success');
+      toggleAuthMode();
+      btn.disabled=false;
+      return;
+    }
+
+    // Sign in
+    const users = getRegisteredUsers();
+    const found = users.find(u => u.email === email && u.password === password);
+    if (!found) {
+      showMsg('Invalid email or password.', 'error');
+      btn.disabled=false; btn.textContent='Sign In'; return;
+    }
+    if (found.role !== currentRole) {
+      showMsg(`This account is registered as a ${found.role}. Please select the correct role.`, 'error');
+      btn.disabled=false; btn.textContent='Sign In'; return;
+    }
+
+    const user = { uid: found.uid, email: found.email, displayName: found.name, role: found.role };
+
+    if (found.role === 'student') {
+      saveStudentSession(user); // <-- sessionStorage
+      toast('🎒 Student session saved to sessionStorage');
+    } else {
+      saveTeacherSession(user); // <-- localStorage
+      toast('👩‍🏫 Teacher session saved to localStorage');
+    }
+    onUserLogin(user);
+    return;
+  }
+
+  // ---- FIREBASE MODE ----
+  try {
+    let userCred;
+    if (isSignUp) {
+      if (!name) { showMsg('Please enter your name.', 'error'); btn.disabled=false; btn.textContent='Create Account'; return; }
+      userCred = await auth.createUserWithEmailAndPassword(email, password);
+      await db.collection('users').doc(userCred.user.uid).set({ name, role: currentRole, email });
+      await userCred.user.updateProfile({ displayName: name });
+      // Also save to localStorage for offline reference
+      const users = getRegisteredUsers();
+      users.push({ uid: userCred.user.uid, email, name, role: currentRole });
+      saveRegisteredUsers(users);
+    } else {
+      userCred = await auth.signInWithEmailAndPassword(email, password);
+    }
+    const userDoc = await db.collection('users').doc(userCred.user.uid).get();
+    const userData = { uid: userCred.user.uid, email: userCred.user.email, displayName: userCred.user.displayName, ...userDoc.data() };
+
+    if (userData.role === 'student') {
+      saveStudentSession(userData);
+    } else {
+      saveTeacherSession(userData);
+    }
+    onUserLogin(userData);
+  } catch(e) {
+    showMsg(e.message, 'error');
+    btn.disabled=false;
+    btn.textContent = isSignUp ? 'Create Account' : 'Sign In';
+  }
+}
+
+function onUserLogin(user) {
+  currentUser = user;
+  document.getElementById('page-auth').classList.remove('active');
+  document.getElementById('page-dashboard').classList.add('active');
+  document.getElementById('main-header').style.display = 'flex';
+
+  const initials = (user.displayName||user.email).split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  document.getElementById('user-avatar').textContent     = initials;
+  document.getElementById('user-name').textContent       = user.displayName || user.email;
+  document.getElementById('user-role-label').textContent = user.role==='teacher' ? '👩‍🏫 Teacher' : '🎒 Student';
+
+  buildDashboard(user.role);
+  loadRecords();
+}
+
+function logout() {
+  if (!DEMO_MODE && auth) auth.signOut();
+  clearSessions();
+  currentUser = null;
+  stopQR(); stopScanner();
+  document.getElementById('page-auth').classList.add('active');
+  document.getElementById('page-dashboard').classList.remove('active');
+  document.getElementById('main-header').style.display = 'none';
+  document.getElementById('auth-msg').innerHTML = '';
+  toast('👋 Signed out successfully');
+}
+
+function showMsg(text, type) {
+  document.getElementById('auth-msg').innerHTML = `<div class="msg ${type}">${text}</div>`;
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+function buildDashboard(role) {
+  const nav = document.getElementById('dash-nav');
+  const stats = document.getElementById('stats-row');
+  if (role === 'teacher') {
+    nav.innerHTML = `
+      <button class="nav-tab active" onclick="showSection('generate',this)">📲 Generate QR</button>
+      <button class="nav-tab" onclick="showSection('records',this)">📋 Records</button>`;
+    stats.innerHTML = `
+      <div class="stat-card glass"><div class="stat-num red" id="stat-sessions">0</div><div class="stat-label">Sessions Today</div></div>
+      <div class="stat-card glass"><div class="stat-num cream" id="stat-total">0</div><div class="stat-label">Total Students</div></div>
+      <div class="stat-card glass"><div class="stat-num warm" id="stat-rate">0%</div><div class="stat-label">Avg Attendance</div></div>`;
+    showSection('generate');
+  } else {
+    nav.innerHTML = `
+      <button class="nav-tab active" onclick="showSection('scan',this)">📷 Scan QR</button>
+      <button class="nav-tab" onclick="showSection('records',this)">📋 My Attendance</button>`;
+    stats.innerHTML = `
+      <div class="stat-card glass"><div class="stat-num red" id="stat-present">0</div><div class="stat-label">Classes Attended</div></div>
+      <div class="stat-card glass"><div class="stat-num warm" id="stat-pct">0%</div><div class="stat-label">Attendance Rate</div></div>`;
+    showSection('scan');
+  }
+}
+
+function showSection(id, el) {
+  document.querySelectorAll('.dash-section').forEach(s => s.classList.remove('active'));
+  document.getElementById('section-'+id).classList.add('active');
+  if (el) { document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active')); el.classList.add('active'); }
+  if (id === 'records') loadRecords();
+}
+
+// ============================================================
+// QR GENERATOR
+// ============================================================
+function generateQR() {
+  const subject  = document.getElementById('subject-select').value;
+  const validity = parseInt(document.getElementById('validity-select').value);
+  if (!subject) { toast('⚠ Please select a subject first.'); return; }
+  stopQR();
+
+  const sessionId   = generateSessionId();
+  const sessionData = {
+    sessionId, subject,
+    teacherId:   currentUser.uid,
+    teacherName: currentUser.displayName || currentUser.email,
+    createdAt:   Date.now(),
+    expiresAt:   Date.now() + validity * 1000,
+    valid: true
+  };
+  activeSession = sessionData;
+
+  if (!DEMO_MODE) db.collection('sessions').doc(sessionId).set(sessionData);
+  renderQR(sessionData, validity);
+  document.getElementById('stop-btn').style.display = 'inline-block';
+  toast('✅ QR session started for ' + subject);
+}
+
+function renderQR(session, validity) {
+  const area = document.getElementById('qr-display-area');
+  area.innerHTML = `
+    <div class="qr-timer" id="qr-countdown">--:--</div>
+    <div id="qr-code-box"></div>
+    <div class="qr-session-id">SESSION • ${session.sessionId}</div>
+    <div style="font-size:0.84rem;color:var(--text-muted);">📚 ${session.subject}</div>`;
+  const qrData = JSON.stringify({ sessionId: session.sessionId, subject: session.subject, expiresAt: session.expiresAt });
+  new QRCode(document.getElementById('qr-code-box'), {
+    text: qrData, width: 210, height: 210,
+    colorDark: '#1a0508', colorLight: '#f5f0eb',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+  let remaining = validity;
+  updateCountdown(remaining);
+  qrInterval = setInterval(() => {
+    remaining--;
+    updateCountdown(remaining);
+    if (remaining <= 0) { stopQR(); toast('⏰ QR expired. Generate a new one.'); }
+  }, 1000);
+}
+
+function updateCountdown(sec) {
+  const el = document.getElementById('qr-countdown');
+  if (!el) return;
+  const m = String(Math.floor(sec/60)).padStart(2,'0');
+  const s = String(sec%60).padStart(2,'0');
+  el.textContent = `${m}:${s}`;
+  el.className = 'qr-timer' + (sec<=30 ? ' warning' : '');
+}
+
+function stopQR() {
+  if (qrInterval) clearInterval(qrInterval);
+  qrInterval = null;
+  if (activeSession && !DEMO_MODE) db.collection('sessions').doc(activeSession.sessionId).update({ valid: false });
+  activeSession = null;
+  document.getElementById('stop-btn').style.display = 'none';
+  const area = document.getElementById('qr-display-area');
+  if (area) area.innerHTML = `<div class="qr-placeholder"><div class="icon">🔲</div><div>Session stopped. Generate a new QR.</div></div>`;
+}
+
+function downloadQR() {
+  const canvas = document.querySelector('#qr-code-box canvas');
+  if (!canvas) { toast('⚠ Generate a QR code first.'); return; }
+  const link = document.createElement('a');
+  link.download = `qr-${Date.now()}.png`;
+  link.href = canvas.toDataURL();
+  link.click();
+  toast('⬇ QR downloaded!');
+}
+
+function generateSessionId() {
+  return Math.random().toString(36).substring(2,8).toUpperCase() + '-' + Date.now().toString(36).slice(-4).toUpperCase();
+}
+
+// ============================================================
+// QR SCANNER
+// ============================================================
+function startScanner() {
+  if (html5QrCode) stopScanner();
+  html5QrCode = new Html5Qrcode('qr-reader');
+  html5QrCode.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: { width: 250, height: 250 } },
+    onQRSuccess, () => {}
+  ).catch(err => {
+    toast('📷 Camera error: ' + err);
+    if (DEMO_MODE) simulateScan();
+  });
+}
+
+function stopScanner() {
+  if (html5QrCode) { html5QrCode.stop().catch(()=>{}); html5QrCode.clear(); html5QrCode = null; }
+}
+
+async function onQRSuccess(decodedText) {
+  stopScanner();
+  try {
+    const data = JSON.parse(decodedText);
+    await markAttendance(data);
+  } catch { showScanResult(false,'Invalid QR Code','This QR code is not valid.'); }
+}
+
+async function markAttendance(qrData) {
+  if (Date.now() > qrData.expiresAt) {
+    showScanResult(false,'QR Expired','This QR code has already expired. Ask your teacher for a new one.');
+    return;
+  }
+  const record = {
+    id: 'rec_' + Date.now(),
+    sessionId:   qrData.sessionId,
+    subject:     qrData.subject,
+    studentId:   currentUser.uid,
+    studentName: currentUser.displayName || currentUser.email,
+    timestamp:   new Date().toISOString(),
+    status: 'Present'
+  };
+  if (DEMO_MODE) {
+    const records = getAttendanceRecords();
+    if (records.find(r => r.sessionId===qrData.sessionId && r.studentId===currentUser.uid)) {
+      showScanResult(false,'Already Marked','Your attendance was already recorded for this session.');
+      return;
+    }
+    records.push(record);
+    saveAttendanceRecords(records); // <-- localStorage
+  } else {
+    const existing = await db.collection('attendance')
+      .where('sessionId','==',qrData.sessionId)
+      .where('studentId','==',currentUser.uid).get();
+    if (!existing.empty) { showScanResult(false,'Already Marked','Already recorded.'); return; }
+    await db.collection('attendance').add(record);
+  }
+  showScanResult(true,'Attendance Marked! ✅',`You've been marked present for ${qrData.subject}.`);
+  toast('✅ Attendance recorded for ' + qrData.subject);
+}
+
+function showScanResult(success, title, detail) {
+  const el = document.getElementById('scan-result');
+  document.getElementById('scan-icon').textContent  = success ? '✅' : '❌';
+  document.getElementById('scan-title').textContent = title;
+  document.getElementById('scan-detail').textContent= detail;
+  el.className = 'scan-result ' + (success ? 'success' : 'error');
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 5000);
+}
+
+function simulateScan() {
+  const fakeQR = { sessionId:'DEMO01', subject:'Computer Science', expiresAt: Date.now()+300000 };
+  toast('📷 Demo: Simulating QR scan...');
+  setTimeout(() => onQRSuccess(JSON.stringify(fakeQR)), 1500);
+}
+
+// ============================================================
+// RECORDS
+// ============================================================
+async function loadRecords() {
+  if (DEMO_MODE) {
+    const stored = getAttendanceRecords();
+    allRecords = stored.length ? stored : demoRecords;
+    allRecords = allRecords.map(r => ({ ...r, timestamp: new Date(r.timestamp) }));
+    renderRecords(allRecords);
+    updateStats(allRecords);
+    return;
+  }
+  try {
+    let q = db.collection('attendance').orderBy('timestamp','desc').limit(200);
+    if (currentUser.role==='student') q = q.where('studentId','==',currentUser.uid);
+    const snap = await q.get();
+    allRecords = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    renderRecords(allRecords);
+    updateStats(allRecords);
+  } catch(e) { console.error(e); }
+}
+
+function filterRecords() {
+  const search  = document.getElementById('search-filter').value.toLowerCase();
+  const subject = document.getElementById('subject-filter').value;
+  renderRecords(allRecords.filter(r =>
+    (!search  || (r.studentName||'').toLowerCase().includes(search)) &&
+    (!subject || r.subject===subject)
+  ));
+}
+
+function renderRecords(records) {
+  const tbody = document.getElementById('records-tbody');
+  if (!records.length) {
+    tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state"><div class="icon">📭</div><div>No records found</div></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = records.map(r => {
+    const ts = r.timestamp instanceof Date ? r.timestamp : (r.timestamp?.toDate ? r.timestamp.toDate() : new Date(r.timestamp));
+    return `<tr>
+      <td><div style="font-weight:500;color:var(--offwhite);">${r.studentName||'—'}</div><div style="font-size:0.76rem;color:var(--text-muted);">${r.studentId||''}</div></td>
+      <td><span class="badge badge-class">📚 ${r.subject||'—'}</span></td>
+      <td><div style="color:var(--offwhite);">${formatDate(ts)}</div><div style="font-size:0.76rem;color:var(--text-muted);">${formatTime(ts)}</div></td>
+      <td><span class="badge badge-present">● Present</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function updateStats(records) {
+  const today   = new Date().toDateString();
+  const todayRec= records.filter(r => new Date(r.timestamp).toDateString()===today);
+  const unique  = new Set(records.map(r=>r.studentId)).size;
+  if (currentUser?.role==='teacher') {
+    safeSet('stat-sessions', todayRec.length);
+    safeSet('stat-total',    unique);
+    safeSet('stat-rate',     records.length>0 ? Math.round(todayRec.length/records.length*100)+'%' : '0%');
+  } else {
+    safeSet('stat-present', records.length);
+    safeSet('stat-pct',     records.length>0 ? '100%' : '0%');
+  }
+}
+
+function safeSet(id,v) { const e=document.getElementById(id); if(e) e.textContent=v; }
+function formatDate(d) { return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
+function formatTime(d) { return d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}); }
+function toast(msg, dur=3500) {
+  const c=document.getElementById('toast-container');
+  const t=document.createElement('div'); t.className='toast'; t.textContent=msg;
+  c.appendChild(t); setTimeout(()=>t.remove(),dur);
+}
+
+// ============================================================
+// AUTO-LOGIN on page load (check saved sessions)
+// ============================================================
+window.addEventListener('load', () => {
+  updateStorageInfo();
+
+  // Check sessionStorage first (student)
+  try {
+    const ss = sessionStorage.getItem(SS_STUDENT_KEY);
+    if (ss) { const u=JSON.parse(ss); toast('🎒 Welcome back, '+u.displayName+'!'); onUserLogin(u); return; }
+  } catch {}
+
+  // Check localStorage (teacher)
+  try {
+    const ls = localStorage.getItem(LS_TEACHER_KEY);
+    if (ls) { const u=JSON.parse(ls); toast('👩‍🏫 Welcome back, '+u.displayName+'!'); onUserLogin(u); return; }
+  } catch {}
+
+  if (DEMO_MODE) toast('🎭 Demo Mode — register to try the app!');
+});
+
+// Firebase auth listener
+if (!DEMO_MODE) {
+  auth.onAuthStateChanged(async user => {
+    if (user) {
+      const doc = await db.collection('users').doc(user.uid).get();
+      const u = { uid:user.uid, email:user.email, displayName:user.displayName, ...doc.data() };
+      if (u.role==='student') saveStudentSession(u);
+      else saveTeacherSession(u);
+      onUserLogin(u);
+    }
+  });
+}
+</script>
+</body>
+</html>
