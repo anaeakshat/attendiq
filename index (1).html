@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AttendIQ — QR Attendance System</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --red:#e63946;--red-deep:#c1121f;--red-glow:rgba(230,57,70,0.45);
+  --red-border:rgba(230,57,70,0.35);--offwhite:#f5f0eb;
+  --glass-bg:rgba(245,240,235,0.09);--glass-border:rgba(245,240,235,0.22);
+  --glass-shadow:0 8px 40px rgba(0,0,0,0.35);--glass-blur:blur(20px);
+  --text:#f5f0eb;--text-muted:rgba(245,240,235,0.6);--text-dim:rgba(245,240,235,0.35);
+  --radius:20px;--radius-sm:12px;--font:'Outfit',sans-serif;--mono:'Space Mono',monospace;
+  --green:#22c55e;--yellow:#eab308;--danger:#ef4444;
+}
+html{scroll-behavior:smooth}
+body{font-family:var(--font);background:linear-gradient(135deg,#1a0508 0%,#2d0a10 30%,#1c0b14 60%,#0f0304 100%);min-height:100vh;color:var(--text);overflow-x:hidden}
+.bg-orbs{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.orb{position:absolute;border-radius:50%;filter:blur(90px);opacity:.30;animation:floatOrb 14s ease-in-out infinite}
+.orb-1{width:550px;height:550px;background:#e63946;top:-180px;left:-180px;animation-delay:0s}
+.orb-2{width:420px;height:420px;background:#9b2226;bottom:-100px;right:-120px;animation-delay:5s}
+.orb-3{width:320px;height:320px;background:#c1121f;top:45%;left:38%;animation-delay:9s;opacity:.18}
+@keyframes floatOrb{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(35px,-45px) scale(1.06)}66%{transform:translate(-25px,25px) scale(0.96)}}
+.app-wrapper{position:relative;z-index:1;max-width:1150px;margin:0 auto;padding:24px 16px}
+.glass{background:var(--glass-bg);border:1px solid var(--glass-border);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);box-shadow:var(--glass-shadow);border-radius:var(--radius)}
+
+/* HEADER */
+.header{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;margin-bottom:28px;flex-wrap:wrap;gap:12px}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-icon{width:44px;height:44px;background:linear-gradient(135deg,var(--red),var(--red-deep));border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 18px var(--red-glow)}
+.logo h1{font-size:1.35rem;font-weight:700;color:var(--offwhite)}
+.logo h1 span{color:var(--red)}
+.header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.user-badge{display:flex;align-items:center;gap:10px;background:rgba(245,240,235,0.07);border:1px solid rgba(245,240,235,0.14);border-radius:40px;padding:6px 16px 6px 6px}
+.avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--red-deep));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.75rem;color:var(--offwhite);box-shadow:0 2px 10px var(--red-glow)}
+.user-name-text{font-weight:600;font-size:0.88rem;color:var(--offwhite)}
+.user-role{color:var(--red);font-weight:600;font-size:0.75rem}
+.btn-logout{background:rgba(230,57,70,0.12);border:1px solid var(--red-border);color:var(--red);padding:7px 16px;border-radius:40px;cursor:pointer;font-family:var(--font);font-size:0.82rem;font-weight:500;transition:background 0.2s}
+.btn-logout:hover{background:rgba(230,57,70,0.25)}
+
+/* PAGES */
+.page{display:none}.page.active{display:block}
+
+/* AUTH */
+.auth-wrap{display:flex;align-items:center;justify-content:center;min-height:82vh;padding:20px}
+.auth-card{width:100%;max-width:460px;padding:40px 36px;text-align:center}
+.auth-logo-icon{width:52px;height:52px;background:linear-gradient(135deg,var(--red),var(--red-deep));border-radius:14px;font-size:26px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 24px var(--red-glow);margin:0 auto 8px}
+.auth-card h2{font-size:1.9rem;font-weight:700;color:var(--offwhite);margin-bottom:4px}
+.auth-card .subtitle{color:var(--text-muted);font-size:0.92rem;margin-bottom:6px}
+.auth-divider{width:48px;height:3px;background:linear-gradient(90deg,var(--red),var(--red-deep));border-radius:4px;margin:10px auto 24px}
+.role-tabs{display:flex;gap:6px;background:rgba(0,0,0,0.25);border-radius:12px;padding:5px;margin-bottom:18px}
+.role-tab{flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:var(--font);font-size:0.88rem;font-weight:500;background:transparent;color:var(--text-muted);transition:all 0.25s}
+.role-tab.active{background:linear-gradient(135deg,var(--red),var(--red-deep));color:var(--offwhite);box-shadow:0 4px 18px var(--red-glow)}
+.form-group{margin-bottom:13px;text-align:left}
+.form-group label{display:block;font-size:0.80rem;font-weight:500;color:var(--text-muted);margin-bottom:5px}
+.form-group input,.form-group select{width:100%;padding:11px 14px;background:rgba(245,240,235,0.07);border:1px solid rgba(245,240,235,0.14);border-radius:var(--radius-sm);color:var(--offwhite);font-family:var(--font);font-size:0.93rem;outline:none;transition:border-color 0.2s,background 0.2s}
+.form-group input:focus,.form-group select:focus{border-color:var(--red);background:rgba(230,57,70,0.08)}
+.form-group input::placeholder{color:var(--text-dim)}
+.form-group select option{background:#2d0a10;color:var(--offwhite)}
+.btn-primary{width:100%;padding:13px;background:linear-gradient(135deg,var(--red),var(--red-deep));border:none;border-radius:var(--radius-sm);color:var(--offwhite);font-family:var(--font);font-size:1rem;font-weight:600;cursor:pointer;margin-top:8px;transition:transform 0.2s,box-shadow 0.2s;box-shadow:0 4px 22px var(--red-glow)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 30px var(--red-glow)}
+.btn-primary:disabled{opacity:0.5;cursor:not-allowed;transform:none}
+.msg{margin-top:12px;padding:10px 14px;border-radius:10px;font-size:0.87rem}
+.msg.error{background:rgba(230,57,70,0.13);border:1px solid var(--red-border);color:#fca5a5}
+.msg.success{background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.3);color:#6ee7b7}
+.storage-info{margin-top:12px;padding:8px 14px;background:rgba(245,240,235,0.05);border:1px solid rgba(245,240,235,0.10);border-radius:8px;font-size:0.78rem;color:var(--text-dim)}
+.storage-info span{color:var(--red);font-weight:600}
+.auth-toggle{margin-top:16px;font-size:0.88rem;color:var(--text-muted)}
+.auth-toggle a{color:var(--red);cursor:pointer;font-weight:600}
+
+/* DASHBOARD NAV */
+.dash-nav{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap}
+.nav-tab{padding:10px 20px;border-radius:40px;border:1px solid rgba(245,240,235,0.14);background:rgba(245,240,235,0.05);color:var(--text-muted);font-family:var(--font);font-size:0.88rem;font-weight:500;cursor:pointer;transition:all 0.2s}
+.nav-tab.active{background:linear-gradient(135deg,var(--red),var(--red-deep));border-color:transparent;color:var(--offwhite);box-shadow:0 4px 18px var(--red-glow)}
+.nav-tab:hover:not(.active){background:rgba(245,240,235,0.10);color:var(--offwhite)}
+.dash-section{display:none}.dash-section.active{display:block}
+
+/* STATS */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:24px}
+.stat-card{padding:22px;text-align:center}
+.stat-num{font-size:2.1rem;font-weight:700;font-family:var(--mono)}
+.stat-num.red{color:var(--red);text-shadow:0 0 20px var(--red-glow)}
+.stat-num.cream{color:var(--offwhite)}
+.stat-num.warm{color:#f4a261}
+.stat-num.green-num{color:var(--green)}
+.stat-label{font-size:0.78rem;color:var(--text-muted);margin-top:5px;letter-spacing:0.5px}
+
+/* QR SECTION */
+.qr-section{padding:28px 30px}
+.qr-section h3,.scanner-wrap h3,.records-wrap h3{font-size:1.1rem;font-weight:600;margin-bottom:16px;color:var(--offwhite)}
+.qr-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px}
+.select-wrap label{font-size:0.80rem;font-weight:500;color:var(--text-muted);margin-bottom:5px;display:block}
+.select-wrap select{width:100%;padding:11px 14px;background:rgba(245,240,235,0.07);border:1px solid rgba(245,240,235,0.14);border-radius:var(--radius-sm);color:var(--offwhite);font-family:var(--font);font-size:0.9rem;outline:none;cursor:pointer;appearance:none;transition:border-color 0.2s}
+.select-wrap select:focus{border-color:var(--red)}
+.select-wrap select option{background:#2d0a10;color:var(--offwhite)}
+.qr-display-area{display:flex;flex-direction:column;align-items:center;gap:16px;padding:28px;background:rgba(245,240,235,0.04);border:1px dashed rgba(245,240,235,0.14);border-radius:var(--radius);min-height:260px;justify-content:center}
+#qr-code-box canvas,#qr-code-box img{border-radius:12px;padding:14px;background:#f5f0eb;box-shadow:0 4px 28px rgba(0,0,0,0.40)}
+.qr-timer{font-family:var(--mono);font-size:2.2rem;font-weight:700;color:var(--offwhite);letter-spacing:2px}
+.qr-timer.warning{color:var(--red);animation:timerPulse 0.7s ease-in-out infinite}
+@keyframes timerPulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.qr-session-id{font-family:var(--mono);font-size:0.78rem;color:var(--text-muted);background:rgba(0,0,0,0.30);padding:6px 16px;border-radius:40px;letter-spacing:2px}
+.qr-placeholder{text-align:center;color:var(--text-muted)}
+.qr-placeholder .icon{font-size:3rem;margin-bottom:10px;opacity:.45}
+.btn-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}
+.btn-glass{flex:1;min-width:120px;padding:11px 18px;background:rgba(245,240,235,0.07);border:1px solid rgba(245,240,235,0.16);border-radius:12px;color:var(--offwhite);font-family:var(--font);font-size:0.9rem;font-weight:500;cursor:pointer;text-align:center;transition:all 0.2s}
+.btn-glass:hover{background:rgba(245,240,235,0.15);transform:translateY(-1px)}
+.btn-glass.red-btn{background:rgba(230,57,70,0.14);border-color:var(--red-border);color:var(--red)}
+.btn-glass.red-btn:hover{background:rgba(230,57,70,0.26)}
+.btn-glass.accent{background:linear-gradient(135deg,var(--red),var(--red-deep));border-color:transparent;color:var(--offwhite);box-shadow:0 4px 18px var(--red-glow)}
+.btn-glass.accent:hover{box-shadow:0 8px 28px var(--red-glow)}
+
+/* SCANNER */
+.scanner-wrap{padding:28px 30px}
+.scanner-wrap .desc{color:var(--text-muted);margin-bottom:18px;font-size:0.9rem}
+#qr-reader{border-radius:var(--radius-sm);overflow:hidden;max-width:420px;margin:0 auto}
+.scan-result{margin-top:18px;padding:18px;border-radius:var(--radius-sm);display:none;text-align:center}
+.scan-result.success{background:rgba(52,211,153,0.10);border:1px solid rgba(52,211,153,0.30)}
+.scan-result.error{background:rgba(230,57,70,0.10);border:1px solid var(--red-border)}
+.scan-result-icon{font-size:2.2rem;margin-bottom:8px}
+.scan-result h4{font-size:1rem;font-weight:600;margin-bottom:4px;color:var(--offwhite)}
+.scan-result p{font-size:0.87rem;color:var(--text-muted)}
+
+/* RECORDS */
+.records-wrap{padding:28px 30px}
+.filter-row{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.filter-row input,.filter-row select{padding:10px 14px;flex:1;min-width:130px;background:rgba(245,240,235,0.07);border:1px solid rgba(245,240,235,0.14);border-radius:10px;color:var(--offwhite);font-family:var(--font);font-size:0.88rem;outline:none}
+.filter-row input::placeholder{color:var(--text-dim)}
+.filter-row select option{background:#2d0a10}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:0.88rem;min-width:480px}
+th{padding:12px 16px;text-align:left;font-size:0.72rem;font-weight:600;letter-spacing:1px;color:var(--text-muted);text-transform:uppercase;border-bottom:1px solid rgba(245,240,235,0.10)}
+td{padding:13px 16px;border-bottom:1px solid rgba(245,240,235,0.05);vertical-align:middle}
+tr:hover td{background:rgba(230,57,70,0.05)}
+
+/* ATTENDANCE PERCENTAGE COLORS */
+.pct-green{color:#22c55e;font-weight:700;font-family:var(--mono)}
+.pct-yellow{color:#eab308;font-weight:700;font-family:var(--mono)}
+.pct-red{color:#ef4444;font-weight:700;font-family:var(--mono)}
+
+/* pct bar */
+.pct-bar-wrap{display:flex;align-items:center;gap:10px}
+.pct-bar{height:6px;border-radius:10px;flex:1;background:rgba(255,255,255,0.08);overflow:hidden}
+.pct-bar-fill{height:100%;border-radius:10px;transition:width 0.6s ease}
+.pct-bar-fill.green{background:linear-gradient(90deg,#16a34a,#22c55e)}
+.pct-bar-fill.yellow{background:linear-gradient(90deg,#ca8a04,#eab308)}
+.pct-bar-fill.red{background:linear-gradient(90deg,#b91c1c,#ef4444)}
+
+/* SEMESTER TABS */
+.semester-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+.sem-tab{padding:8px 18px;border-radius:40px;border:1px solid rgba(245,240,235,0.14);background:rgba(245,240,235,0.05);color:var(--text-muted);font-family:var(--font);font-size:0.84rem;font-weight:500;cursor:pointer;transition:all 0.2s}
+.sem-tab.active{background:rgba(230,57,70,0.2);border-color:var(--red-border);color:var(--red)}
+.sem-tab:hover:not(.active){background:rgba(245,240,235,0.10);color:var(--offwhite)}
+
+/* STUDENT ATTENDANCE CARD */
+.my-att-card{padding:22px 28px;margin-bottom:16px}
+.my-att-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+.my-att-header h4{font-size:1rem;font-weight:600;color:var(--offwhite)}
+.big-pct{font-size:3rem;font-weight:700;font-family:var(--mono)}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:40px;font-size:0.74rem;font-weight:600}
+.badge-present{background:rgba(52,211,153,0.13);color:#34d399;border:1px solid rgba(52,211,153,0.28)}
+.badge-class{background:rgba(230,57,70,0.13);color:#f87171;border:1px solid var(--red-border)}
+.badge-sem{background:rgba(167,139,250,0.13);color:#a78bfa;border:1px solid rgba(167,139,250,0.28)}
+.empty-state{text-align:center;padding:48px 20px;color:var(--text-muted)}
+.empty-state .icon{font-size:2.5rem;margin-bottom:10px;opacity:.45}
+
+/* ACCESS DENIED */
+.access-denied{text-align:center;padding:60px 20px;color:var(--text-muted)}
+.access-denied .icon{font-size:3rem;margin-bottom:12px}
+.access-denied h3{font-size:1.2rem;font-weight:600;color:var(--red);margin-bottom:8px}
+
+/* TOAST */
+.toast-container{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+.toast{padding:13px 18px;background:rgba(26,5,8,0.92);backdrop-filter:blur(16px);border:1px solid rgba(245,240,235,0.15);border-left:3px solid var(--red);border-radius:12px;font-size:0.87rem;color:var(--offwhite);box-shadow:0 8px 32px rgba(0,0,0,0.45);max-width:310px;animation:slideInToast 0.3s ease}
+@keyframes slideInToast{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:translateX(0)}}
+
+@media(max-width:600px){
+  .header{padding:13px 14px}
+  .qr-section,.scanner-wrap,.records-wrap{padding:18px 14px}
+  .auth-card{padding:28px 18px}
+  .qr-timer{font-size:1.7rem}
+  td,th{padding:10px}
+  .toast-container{left:14px;right:14px}
+  .btn-row{flex-direction:column}
+  .stats-row{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="bg-orbs"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div></div>
+<div class="app-wrapper">
+
+<!-- HEADER -->
+<header class="header glass" id="main-header" style="display:none;">
+  <div class="logo">
+    <div class="logo-icon">📡</div>
+    <h1>Attend<span>IQ</span></h1>
+  </div>
+  <div class="header-right">
+    <div class="user-badge">
+      <div class="avatar" id="user-avatar">?</div>
+      <div>
+        <div class="user-name-text" id="user-name">—</div>
+        <div class="user-role" id="user-role-label">—</div>
+      </div>
+    </div>
+    <button class="btn-logout" onclick="logout()">Sign Out</button>
+  </div>
+</header>
+
+<!-- AUTH PAGE -->
+<div class="page active" id="page-auth">
+  <div class="auth-wrap">
+    <div class="auth-card glass">
+      <div class="auth-logo-icon">📡</div>
+      <h2>AttendIQ</h2>
+      <p class="subtitle">Smart QR Attendance System</p>
+      <div class="auth-divider"></div>
+
+      <div class="role-tabs">
+        <button class="role-tab active" onclick="setRole('teacher',this)">👩‍🏫 Teacher</button>
+        <button class="role-tab" onclick="setRole('student',this)">🎒 Student</button>
+      </div>
+
+      <div class="form-group"><label>Email Address</label><input type="email" id="auth-email" placeholder="you@school.edu"/></div>
+      <div class="form-group"><label>Password</label><input type="password" id="auth-password" placeholder="••••••••"/></div>
+
+      <!-- Sign up fields -->
+      <div id="signup-fields" style="display:none;">
+        <div class="form-group"><label>Full Name</label><input type="text" id="auth-name" placeholder="Your full name"/></div>
+        <div class="form-group">
+          <label>Department</label>
+          <select id="auth-dept">
+            <option value="">Select department...</option>
+            <option>Computer Science</option><option>Information Technology</option>
+            <option>Electronics</option><option>Mechanical</option>
+            <option>Civil</option><option>Mathematics</option><option>Physics</option>
+          </select>
+        </div>
+        <!-- Teacher only -->
+        <div id="teacher-signup-fields" style="display:none;">
+          <div class="form-group">
+            <label>Semesters You Teach (select multiple)</label>
+            <div id="sem-checkboxes" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;background:rgba(245,240,235,0.07);padding:8px 12px;border-radius:8px;border:1px solid rgba(245,240,235,0.14);font-size:0.85rem;color:var(--text)"><input type="checkbox" value="1" style="accent-color:var(--red)"> Sem 1</label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;background:rgba(245,240,235,0.07);padding:8px 12px;border-radius:8px;border:1px solid rgba(245,240,235,0.14);font-size:0.85rem;color:var(--text)"><input type="checkbox" value="2" style="accent-color:var(--red)"> Sem 2</label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;background:rgba(245,240,235,0.07);padding:8px 12px;border-radius:8px;border:1px solid rgba(245,240,235,0.14);font-size:0.85rem;color:var(--text)"><input type="checkbox" value="3" style="accent-color:var(--red)"> Sem 3</label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;background:rgba(245,240,235,0.07);padding:8px 12px;border-radius:8px;border:1px solid rgba(245,240,235,0.14);font-size:0.85rem;color:var(--text)"><input type="checkbox" value="4" style="accent-color:var(--red)"> Sem 4</label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;background:rgba(245,240,235,0.07);padding:8px 12px;border-radius:8px;border:1px solid rgba(245,240,235,0.14);font-size:0.85rem;color:var(--text)"><input type="checkbox" value="5" style="accent-color:var(--red)"> Sem 5</label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;background:rgba(245,240,235,0.07);padding:8px 12px;border-radius:8px;border:1px solid rgba(245,240,235,0.14);font-size:0.85rem;color:var(--text)"><input type="checkbox" value="6" style="accent-color:var(--red)"> Sem 6</label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;background:rgba(245,240,235,0.07);padding:8px 12px;border-radius:8px;border:1px solid rgba(245,240,235,0.14);font-size:0.85rem;color:var(--text)"><input type="checkbox" value="7" style="accent-color:var(--red)"> Sem 7</label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;background:rgba(245,240,235,0.07);padding:8px 12px;border-radius:8px;border:1px solid rgba(245,240,235,0.14);font-size:0.85rem;color:var(--text)"><input type="checkbox" value="8" style="accent-color:var(--red)"> Sem 8</label>
+            </div>
+          </div>
+        </div>
+        <!-- Student only -->
+        <div id="student-signup-fields" style="display:none;">
+          <div class="form-group">
+            <label>Your Semester</label>
+            <select id="auth-sem">
+              <option value="">Select semester...</option>
+              <option value="1">Semester 1</option><option value="2">Semester 2</option>
+              <option value="3">Semester 3</option><option value="4">Semester 4</option>
+              <option value="5">Semester 5</option><option value="6">Semester 6</option>
+              <option value="7">Semester 7</option><option value="8">Semester 8</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Roll Number</label><input type="text" id="auth-roll" placeholder="e.g. CS21001"/></div>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="auth-btn" onclick="handleAuth()">Sign In</button>
+      <div id="auth-msg" role="alert"></div>
+      <div class="storage-info" id="storage-info-box">Sign in uses <span>sessionStorage</span></div>
+      <p class="auth-toggle">
+        <span id="auth-toggle-text">Don't have an account?</span>
+        <a onclick="toggleAuthMode()"><span id="auth-toggle-link"> Create one</span></a>
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- DASHBOARD PAGE -->
+<div class="page" id="page-dashboard">
+  <div class="stats-row" id="stats-row"></div>
+  <div class="dash-nav" id="dash-nav"></div>
+
+  <!-- GENERATE QR -->
+  <div class="dash-section glass" id="section-generate">
+    <div class="qr-section">
+      <h3>📲 Generate Attendance QR</h3>
+      <div class="qr-controls">
+        <div class="select-wrap">
+          <label>Subject</label>
+          <select id="subject-select">
+            <option value="">Select subject...</option>
+            <option>Mathematics</option><option>Physics</option><option>Chemistry</option>
+            <option>Computer Science</option><option>English</option><option>Biology</option>
+            <option>Data Structures</option><option>DBMS</option><option>Operating Systems</option>
+          </select>
+        </div>
+        <div class="select-wrap">
+          <label>Semester</label>
+          <select id="qr-sem-select">
+            <option value="">Select semester...</option>
+            <option value="1">Semester 1</option><option value="2">Semester 2</option>
+            <option value="3">Semester 3</option><option value="4">Semester 4</option>
+            <option value="5">Semester 5</option><option value="6">Semester 6</option>
+            <option value="7">Semester 7</option><option value="8">Semester 8</option>
+          </select>
+        </div>
+        <div class="select-wrap">
+          <label>QR Validity</label>
+          <select id="validity-select">
+            <option value="120">2 minutes</option>
+            <option value="300" selected>5 minutes</option>
+            <option value="600">10 minutes</option>
+            <option value="900">15 minutes</option>
+          </select>
+        </div>
+      </div>
+      <div class="qr-display-area" id="qr-display-area">
+        <div class="qr-placeholder"><div class="icon">🔲</div><p>Select subject & semester, then Generate</p></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn-glass accent" onclick="generateQR()">⚡ Generate QR</button>
+        <button class="btn-glass red-btn" onclick="stopQR()" id="stop-btn" style="display:none;">⏸ Stop</button>
+        <button class="btn-glass" onclick="downloadQR()">⬇ Download</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCAN QR -->
+  <div class="dash-section glass" id="section-scan">
+    <div class="scanner-wrap">
+      <h3>📷 Scan QR Code</h3>
+      <p class="desc">Point your camera at the teacher's QR code to mark attendance.</p>
+      <div id="qr-reader"></div>
+      <div class="scan-result" id="scan-result">
+        <div class="scan-result-icon" id="scan-icon">✅</div>
+        <h4 id="scan-title">Attendance Marked!</h4>
+        <p id="scan-detail">Your attendance has been recorded.</p>
+      </div>
+      <div class="btn-row" style="margin-top:18px;">
+        <button class="btn-glass accent" onclick="startScanner()">📷 Start Camera</button>
+        <button class="btn-glass red-btn" onclick="stopScanner()">✕ Stop Camera</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECORDS (Teacher/Admin) -->
+  <div class="dash-section glass" id="section-records">
+    <div class="records-wrap">
+      <h3>📋 Attendance Records</h3>
+
+      <!-- Semester filter tabs for teacher -->
+      <div class="semester-tabs" id="semester-tabs"></div>
+
+      <div class="filter-row">
+        <input type="search" id="search-filter" placeholder="🔍 Search student..." oninput="filterRecords()"/>
+        <select id="subject-filter" onchange="filterRecords()">
+          <option value="">All Subjects</option>
+          <option>Mathematics</option><option>Physics</option><option>Chemistry</option>
+          <option>Computer Science</option><option>English</option><option>Biology</option>
+          <option>Data Structures</option><option>DBMS</option><option>Operating Systems</option>
+        </select>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Student</th><th>Roll No</th><th>Semester</th>
+              <th>Subject</th><th>Date & Time</th>
+              <th>Attendance %</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="records-tbody">
+            <tr><td colspan="7"><div class="empty-state"><div class="icon">📭</div><p>No records yet</p></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- MY ATTENDANCE (Student only) -->
+  <div class="dash-section glass" id="section-my-attendance">
+    <div class="records-wrap">
+      <h3>📊 My Attendance</h3>
+      <div id="my-att-content">
+        <div class="empty-state"><div class="icon">📭</div><p>No attendance yet</p></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /page-dashboard -->
+</div><!-- /app-wrapper -->
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+// ============================================================
+// FIREBASE CONFIG
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyDWlExcSYcBrZoCvkpZgXyim0ntTPwqy1k",
+  authDomain: "attendiq-42884.firebaseapp.com",
+  projectId: "attendiq-42884",
+  storageBucket: "attendiq-42884.firebasestorage.app",
+  messagingSenderId: "757591992910",
+  appId: "1:757591992910:web:f4514cb5c325bb4a0f711f"
+};
+const DEMO_MODE = false;
+
+let db, auth;
+if (!DEMO_MODE) {
+  firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth();
+  db   = firebase.firestore();
+}
+
+// ============================================================
+// STATE
+// ============================================================
+let currentUser   = null;
+let currentRole   = 'teacher';
+let isSignUp      = false;
+let qrInterval    = null;
+let activeSession = null;
+let html5QrCode   = null;
+let allRecords    = [];
+let activeSemFilter = 'all';
+
+const LS_USERS_KEY   = 'attendiq_users';
+const SS_STUDENT_KEY = 'attendiq_student_session';
+const LS_TEACHER_KEY = 'attendiq_teacher_session';
+const LS_ATTENDANCE  = 'attendiq_attendance';
+
+// ============================================================
+// STORAGE HELPERS
+// ============================================================
+function getUsers()    { try{return JSON.parse(localStorage.getItem(LS_USERS_KEY))||[];}catch{return[]} }
+function saveUsers(u)  { localStorage.setItem(LS_USERS_KEY,JSON.stringify(u)); }
+function getRecs()     { try{return JSON.parse(localStorage.getItem(LS_ATTENDANCE))||[];}catch{return[]} }
+function saveRecs(r)   { localStorage.setItem(LS_ATTENDANCE,JSON.stringify(r)); }
+function saveTeacher(u){ localStorage.setItem(LS_TEACHER_KEY,JSON.stringify(u)); }
+function saveStudent(u){ sessionStorage.setItem(SS_STUDENT_KEY,JSON.stringify(u)); }
+function clearSessions(){ localStorage.removeItem(LS_TEACHER_KEY); sessionStorage.removeItem(SS_STUDENT_KEY); }
+
+// ============================================================
+// AUTH
+// ============================================================
+function setRole(role, el) {
+  currentRole = role;
+  document.querySelectorAll('.role-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  if (isSignUp) {
+    document.getElementById('teacher-signup-fields').style.display = role==='teacher' ? 'block' : 'none';
+    document.getElementById('student-signup-fields').style.display = role==='student' ? 'block' : 'none';
+  }
+  updateStorageInfo();
+}
+
+function updateStorageInfo() {
+  const box = document.getElementById('storage-info-box');
+  if (isSignUp) { box.innerHTML='Registration saves to <span>localStorage</span>'; return; }
+  box.innerHTML = currentRole==='teacher'
+    ? 'Teacher login uses <span>localStorage</span> (stays logged in)'
+    : 'Student login uses <span>sessionStorage</span> (cleared on tab close)';
+}
+
+function toggleAuthMode() {
+  isSignUp = !isSignUp;
+  document.getElementById('auth-btn').textContent         = isSignUp ? 'Create Account' : 'Sign In';
+  document.getElementById('auth-toggle-link').textContent = isSignUp ? ' Sign in instead' : ' Create one';
+  document.getElementById('auth-toggle-text').textContent = isSignUp ? 'Already have an account?' : "Don't have an account?";
+  document.getElementById('signup-fields').style.display  = isSignUp ? 'block' : 'none';
+  document.getElementById('teacher-signup-fields').style.display = (isSignUp && currentRole==='teacher') ? 'block' : 'none';
+  document.getElementById('student-signup-fields').style.display  = (isSignUp && currentRole==='student') ? 'block' : 'none';
+  document.getElementById('auth-msg').innerHTML = '';
+  updateStorageInfo();
+}
+
+async function handleAuth() {
+  const email    = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const btn      = document.getElementById('auth-btn');
+  if (!email||!password) { showMsg('Please fill in all fields.','error'); return; }
+  btn.disabled=true; btn.textContent='Please wait…';
+
+  if (DEMO_MODE) {
+    await new Promise(r=>setTimeout(r,600));
+    if (isSignUp) {
+      const name = document.getElementById('auth-name').value.trim();
+      const dept = document.getElementById('auth-dept').value;
+      if (!name||!dept) { showMsg('Please fill all fields.','error'); btn.disabled=false; btn.textContent='Create Account'; return; }
+      const users = getUsers();
+      if (users.find(u=>u.email===email)) { showMsg('Email already registered.','error'); btn.disabled=false; btn.textContent='Create Account'; return; }
+      let extra = {};
+      if (currentRole==='teacher') {
+        const sems = [...document.querySelectorAll('#sem-checkboxes input:checked')].map(c=>parseInt(c.value));
+        extra = { semesters: sems };
+      } else {
+        const sem  = document.getElementById('auth-sem').value;
+        const roll = document.getElementById('auth-roll').value.trim();
+        extra = { semester: parseInt(sem), rollNumber: roll };
+      }
+      const newUser = { uid:'uid_'+Date.now(), email, password, name, role:currentRole, dept, ...extra };
+      users.push(newUser); saveUsers(users);
+      showMsg('Account created! Please sign in.','success');
+      toggleAuthMode(); btn.disabled=false; return;
+    }
+    const users = getUsers();
+    const found = users.find(u=>u.email===email&&u.password===password);
+    if (!found) { showMsg('Invalid email or password.','error'); btn.disabled=false; btn.textContent='Sign In'; return; }
+    if (found.role!==currentRole) { showMsg(`This account is registered as a ${found.role}.`,'error'); btn.disabled=false; btn.textContent='Sign In'; return; }
+    const user = { uid:found.uid, email:found.email, displayName:found.name, role:found.role, dept:found.dept, semesters:found.semesters||[], semester:found.semester, rollNumber:found.rollNumber };
+    if (found.role==='student') saveStudent(user); else saveTeacher(user);
+    onUserLogin(user); return;
+  }
+
+  // Firebase mode
+  try {
+    let userCred;
+    if (isSignUp) {
+      const name = document.getElementById('auth-name').value.trim();
+      const dept = document.getElementById('auth-dept').value;
+      if (!name||!dept) { showMsg('Fill all fields.','error'); btn.disabled=false; btn.textContent='Create Account'; return; }
+      userCred = await auth.createUserWithEmailAndPassword(email,password);
+      await userCred.user.updateProfile({ displayName: name });
+      let extra = {};
+      if (currentRole==='teacher') {
+        const sems = [...document.querySelectorAll('#sem-checkboxes input:checked')].map(c=>parseInt(c.value));
+        extra = { semesters: sems };
+      } else {
+        extra = { semester: parseInt(document.getElementById('auth-sem').value), rollNumber: document.getElementById('auth-roll').value.trim() };
+      }
+      await db.collection('users').doc(userCred.user.uid).set({ name, role:currentRole, email, dept, ...extra });
+      showMsg('Account created! Signing you in…','success');
+    } else {
+      userCred = await auth.signInWithEmailAndPassword(email,password);
+    }
+    const doc  = await db.collection('users').doc(userCred.user.uid).get();
+    const user = { uid:userCred.user.uid, email:userCred.user.email, displayName:userCred.user.displayName, ...doc.data() };
+    if (user.role==='student') saveStudent(user); else saveTeacher(user);
+    onUserLogin(user);
+  } catch(e) {
+    showMsg(e.message,'error');
+    btn.disabled=false; btn.textContent=isSignUp?'Create Account':'Sign In';
+  }
+}
+
+function onUserLogin(user) {
+  currentUser = user;
+  document.getElementById('page-auth').classList.remove('active');
+  document.getElementById('page-dashboard').classList.add('active');
+  document.getElementById('main-header').style.display='flex';
+  const initials=(user.displayName||user.email).split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  document.getElementById('user-avatar').textContent     = initials;
+  document.getElementById('user-name').textContent       = user.displayName||user.email;
+  document.getElementById('user-role-label').textContent = user.role==='teacher'?'👩‍🏫 Teacher':'🎒 Student';
+  buildDashboard(user.role);
+  loadRecords();
+}
+
+function logout() {
+  if (!DEMO_MODE&&auth) auth.signOut();
+  clearSessions(); currentUser=null; stopQR(); stopScanner();
+  document.getElementById('page-auth').classList.add('active');
+  document.getElementById('page-dashboard').classList.remove('active');
+  document.getElementById('main-header').style.display='none';
+  toast('👋 Signed out');
+}
+
+function showMsg(text,type) { document.getElementById('auth-msg').innerHTML=`<div class="msg ${type}">${text}</div>`; }
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+function buildDashboard(role) {
+  const nav   = document.getElementById('dash-nav');
+  const stats = document.getElementById('stats-row');
+
+  if (role==='teacher') {
+    nav.innerHTML=`
+      <button class="nav-tab active" onclick="showSection('generate',this)">📲 Generate QR</button>
+      <button class="nav-tab" onclick="showSection('records',this)">📋 Student Records</button>`;
+    stats.innerHTML=`
+      <div class="stat-card glass"><div class="stat-num red" id="stat-sessions">0</div><div class="stat-label">Sessions Today</div></div>
+      <div class="stat-card glass"><div class="stat-num cream" id="stat-total">0</div><div class="stat-label">Total Students</div></div>
+      <div class="stat-card glass"><div class="stat-num warm" id="stat-rate">—</div><div class="stat-label">Avg Attendance</div></div>`;
+    buildSemesterTabs();
+    showSection('generate');
+  } else {
+    // Student — NO access to all records
+    nav.innerHTML=`
+      <button class="nav-tab active" onclick="showSection('scan',this)">📷 Scan QR</button>
+      <button class="nav-tab" onclick="showSection('my-attendance',this)">📊 My Attendance</button>`;
+    stats.innerHTML=`
+      <div class="stat-card glass"><div class="stat-num red" id="stat-present">0</div><div class="stat-label">Classes Attended</div></div>
+      <div class="stat-card glass"><div class="stat-num green-num" id="stat-pct">0%</div><div class="stat-label">My Attendance %</div></div>
+      <div class="stat-card glass"><div class="stat-num cream" id="stat-sem">Sem ${currentUser.semester||'—'}</div><div class="stat-label">Your Semester</div></div>`;
+    showSection('scan');
+  }
+}
+
+function buildSemesterTabs() {
+  const sems = currentUser.semesters && currentUser.semesters.length > 0
+    ? currentUser.semesters
+    : [1,2,3,4,5,6,7,8];
+  const container = document.getElementById('semester-tabs');
+  container.innerHTML = `<button class="sem-tab active" onclick="filterBySem('all',this)">All Semesters</button>` +
+    sems.map(s=>`<button class="sem-tab" onclick="filterBySem(${s},this)">Semester ${s}</button>`).join('');
+}
+
+function filterBySem(sem, el) {
+  activeSemFilter = sem;
+  document.querySelectorAll('.sem-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  filterRecords();
+}
+
+function showSection(id, el) {
+  document.querySelectorAll('.dash-section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('section-'+id).classList.add('active');
+  if (el) { document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active')); el.classList.add('active'); }
+  if (id==='records'||id==='my-attendance') loadRecords();
+}
+
+// ============================================================
+// QR GENERATOR
+// ============================================================
+function generateQR() {
+  const subject  = document.getElementById('subject-select').value;
+  const sem      = document.getElementById('qr-sem-select').value;
+  const validity = parseInt(document.getElementById('validity-select').value);
+  if (!subject||!sem) { toast('⚠ Please select subject and semester.'); return; }
+  stopQR();
+  const sessionId = generateSessionId();
+  activeSession = { sessionId, subject, semester:parseInt(sem), teacherId:currentUser.uid, teacherName:currentUser.displayName||currentUser.email, createdAt:Date.now(), expiresAt:Date.now()+validity*1000, valid:true };
+  if (!DEMO_MODE) db.collection('sessions').doc(sessionId).set(activeSession);
+  renderQR(activeSession, validity);
+  document.getElementById('stop-btn').style.display='inline-block';
+  toast(`✅ QR started — Semester ${sem} | ${subject}`);
+}
+
+function renderQR(session, validity) {
+  const area = document.getElementById('qr-display-area');
+  area.innerHTML=`
+    <div class="qr-timer" id="qr-countdown">--:--</div>
+    <div id="qr-code-box"></div>
+    <div class="qr-session-id">SEM ${session.semester} • ${session.sessionId}</div>
+    <div style="font-size:0.84rem;color:var(--text-muted);">📚 ${session.subject}</div>`;
+  new QRCode(document.getElementById('qr-code-box'),{
+    text: JSON.stringify({sessionId:session.sessionId,subject:session.subject,semester:session.semester,expiresAt:session.expiresAt}),
+    width:210,height:210,colorDark:'#1a0508',colorLight:'#f5f0eb',correctLevel:QRCode.CorrectLevel.M
+  });
+  let remaining=validity;
+  updateCountdown(remaining);
+  qrInterval=setInterval(()=>{ remaining--; updateCountdown(remaining); if(remaining<=0){stopQR();toast('⏰ QR expired.');} },1000);
+}
+
+function updateCountdown(sec) {
+  const el=document.getElementById('qr-countdown'); if(!el)return;
+  el.textContent=`${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;
+  el.className='qr-timer'+(sec<=30?' warning':'');
+}
+
+function stopQR() {
+  if(qrInterval) clearInterval(qrInterval); qrInterval=null;
+  if(activeSession&&!DEMO_MODE) db.collection('sessions').doc(activeSession.sessionId).update({valid:false});
+  activeSession=null;
+  document.getElementById('stop-btn').style.display='none';
+  const area=document.getElementById('qr-display-area');
+  if(area) area.innerHTML='<div class="qr-placeholder"><div class="icon">🔲</div><p>Session stopped. Generate a new QR.</p></div>';
+}
+
+function downloadQR() {
+  const canvas=document.querySelector('#qr-code-box canvas');
+  if(!canvas){toast('⚠ Generate QR first.');return;}
+  const a=document.createElement('a'); a.download=`qr-${Date.now()}.png`; a.href=canvas.toDataURL(); a.click();
+  toast('⬇ QR downloaded!');
+}
+
+function generateSessionId() {
+  return Math.random().toString(36).substring(2,8).toUpperCase()+'-'+Date.now().toString(36).slice(-4).toUpperCase();
+}
+
+// ============================================================
+// SCANNER
+// ============================================================
+function startScanner() {
+  if(html5QrCode) stopScanner();
+  html5QrCode=new Html5Qrcode('qr-reader');
+  html5QrCode.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:250}},onQRSuccess,()=>{})
+    .catch(err=>{ toast('📷 Camera error: '+err); });
+}
+
+function stopScanner() {
+  if(html5QrCode){html5QrCode.stop().catch(()=>{});html5QrCode.clear();html5QrCode=null;}
+}
+
+async function onQRSuccess(text) {
+  stopScanner();
+  try { await markAttendance(JSON.parse(text)); }
+  catch { showScanResult(false,'Invalid QR','This QR code is not valid.'); }
+}
+
+async function markAttendance(qrData) {
+  if(Date.now()>qrData.expiresAt){ showScanResult(false,'QR Expired','Ask your teacher to generate a new QR.'); return; }
+
+  // Check student semester matches QR semester
+  if(currentUser.semester && qrData.semester && currentUser.semester!==qrData.semester) {
+    showScanResult(false,'Wrong Semester',`This QR is for Semester ${qrData.semester}. You are in Semester ${currentUser.semester}.`); return;
+  }
+
+  const record = {
+    sessionId:   qrData.sessionId,
+    subject:     qrData.subject,
+    semester:    qrData.semester || currentUser.semester || 0,
+    studentId:   currentUser.uid,
+    studentName: currentUser.displayName||currentUser.email,
+    rollNumber:  currentUser.rollNumber||'—',
+    dept:        currentUser.dept||'—',
+    timestamp:   new Date().toISOString(),
+    status:      'Present'
+  };
+
+  if(DEMO_MODE) {
+    const recs=getRecs();
+    if(recs.find(r=>r.sessionId===qrData.sessionId&&r.studentId===currentUser.uid)){ showScanResult(false,'Already Marked','Attendance already recorded.'); return; }
+    recs.push({...record,id:'rec_'+Date.now()}); saveRecs(recs);
+  } else {
+    const ex=await db.collection('attendance').where('sessionId','==',qrData.sessionId).where('studentId','==',currentUser.uid).get();
+    if(!ex.empty){ showScanResult(false,'Already Marked','Attendance already recorded.'); return; }
+    await db.collection('attendance').add(record);
+  }
+  showScanResult(true,'Attendance Marked! ✅',`Present for ${qrData.subject} — Semester ${qrData.semester}`);
+  toast('✅ Attendance recorded!');
+  loadRecords();
+}
+
+function showScanResult(ok,title,detail) {
+  const el=document.getElementById('scan-result');
+  document.getElementById('scan-icon').textContent  = ok?'✅':'❌';
+  document.getElementById('scan-title').textContent = title;
+  document.getElementById('scan-detail').textContent= detail;
+  el.className='scan-result '+(ok?'success':'error');
+  el.style.display='block';
+  setTimeout(()=>el.style.display='none',5000);
+}
+
+// ============================================================
+// RECORDS — Role-based access
+// ============================================================
+async function loadRecords() {
+  let records=[];
+  if(DEMO_MODE) {
+    records=getRecs().map(r=>({...r,timestamp:new Date(r.timestamp)}));
+  } else {
+    try {
+      let q=db.collection('attendance').orderBy('timestamp','desc').limit(500);
+      // Students only see their own records
+      if(currentUser.role==='student') q=q.where('studentId','==',currentUser.uid);
+      const snap=await q.get();
+      records=snap.docs.map(d=>({id:d.id,...d.data(),timestamp:d.data().timestamp?.toDate?d.data().timestamp.toDate():new Date(d.data().timestamp)}));
+    } catch(e){console.error(e);}
+  }
+  allRecords=records;
+
+  if(currentUser.role==='student') {
+    renderMyAttendance(records);
+    updateStudentStats(records);
+  } else {
+    filterRecords();
+    updateTeacherStats(records);
+  }
+}
+
+function filterRecords() {
+  const search  = document.getElementById('search-filter')?.value.toLowerCase()||'';
+  const subject = document.getElementById('subject-filter')?.value||'';
+  let filtered  = allRecords.filter(r=>
+    (!search  || (r.studentName||'').toLowerCase().includes(search)||(r.rollNumber||'').toLowerCase().includes(search)) &&
+    (!subject || r.subject===subject) &&
+    (activeSemFilter==='all' || r.semester===activeSemFilter)
+  );
+  renderRecordsTable(filtered);
+}
+
+function renderRecordsTable(records) {
+  const tbody=document.getElementById('records-tbody');
+  if(!records.length){
+    tbody.innerHTML=`<tr><td colspan="7"><div class="empty-state"><div class="icon">📭</div><p>No records found</p></div></td></tr>`;
+    return;
+  }
+  // Group by student+subject to calc percentage
+  const studentSubjectMap={};
+  records.forEach(r=>{
+    const key=r.studentId+'_'+r.subject;
+    if(!studentSubjectMap[key]) studentSubjectMap[key]={count:0,total:10}; // assume 10 total classes
+    studentSubjectMap[key].count++;
+  });
+  tbody.innerHTML=records.map(r=>{
+    const ts=r.timestamp instanceof Date?r.timestamp:new Date(r.timestamp);
+    const key=r.studentId+'_'+r.subject;
+    const pct=Math.min(100,Math.round((studentSubjectMap[key].count/studentSubjectMap[key].total)*100));
+    const {cls,barCls}=getPctStyle(pct);
+    return `<tr>
+      <td><div style="font-weight:500;color:var(--offwhite)">${r.studentName||'—'}</div><div style="font-size:0.76rem;color:var(--text-muted)">${r.dept||'—'}</div></td>
+      <td style="color:var(--text-muted);font-family:var(--mono);font-size:0.82rem">${r.rollNumber||'—'}</td>
+      <td><span class="badge badge-sem">Sem ${r.semester||'—'}</span></td>
+      <td><span class="badge badge-class">📚 ${r.subject||'—'}</span></td>
+      <td><div style="color:var(--offwhite)">${formatDate(ts)}</div><div style="font-size:0.76rem;color:var(--text-muted)">${formatTime(ts)}</div></td>
+      <td>
+        <div class="pct-bar-wrap">
+          <span class="${cls}">${pct}%</span>
+          <div class="pct-bar"><div class="pct-bar-fill ${barCls}" style="width:${pct}%"></div></div>
+        </div>
+      </td>
+      <td><span class="badge badge-present">● Present</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// STUDENT: MY ATTENDANCE VIEW
+// ============================================================
+function renderMyAttendance(records) {
+  const container=document.getElementById('my-att-content');
+  if(!records.length){
+    container.innerHTML='<div class="empty-state"><div class="icon">📭</div><p>No attendance recorded yet. Scan a QR code to mark attendance.</p></div>';
+    return;
+  }
+  // Group by subject
+  const bySubject={};
+  records.forEach(r=>{
+    if(!bySubject[r.subject]) bySubject[r.subject]={attended:0,total:10,records:[]};
+    bySubject[r.subject].attended++;
+    bySubject[r.subject].records.push(r);
+  });
+  container.innerHTML=Object.entries(bySubject).map(([subj,data])=>{
+    const pct=Math.min(100,Math.round((data.attended/data.total)*100));
+    const {cls,barCls,label}=getPctStyle(pct);
+    const lastSeen=data.records.sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp))[0];
+    const ts=lastSeen.timestamp instanceof Date?lastSeen.timestamp:new Date(lastSeen.timestamp);
+    return `
+    <div class="my-att-card glass" style="margin-bottom:14px;">
+      <div class="my-att-header">
+        <div>
+          <div style="font-weight:600;font-size:1rem;color:var(--offwhite);margin-bottom:4px;">📚 ${subj}</div>
+          <div style="font-size:0.8rem;color:var(--text-muted)">Last attended: ${formatDate(ts)} at ${formatTime(ts)}</div>
+        </div>
+        <div class="big-pct ${cls}">${pct}%</div>
+      </div>
+      <!-- Progress bar -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+        <div class="pct-bar" style="flex:1;height:10px;border-radius:10px;">
+          <div class="pct-bar-fill ${barCls}" style="width:${pct}%"></div>
+        </div>
+        <span style="font-size:0.8rem;color:var(--text-muted);white-space:nowrap">${data.attended}/${data.total} classes</span>
+      </div>
+      <!-- Status label -->
+      <div style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:40px;font-size:0.78rem;font-weight:600;
+        background:${pct>=75?'rgba(34,197,94,0.12)':pct>=45?'rgba(234,179,8,0.12)':'rgba(239,68,68,0.12)'};
+        border:1px solid ${pct>=75?'rgba(34,197,94,0.3)':pct>=45?'rgba(234,179,8,0.3)':'rgba(239,68,68,0.3)'};
+        color:${pct>=75?'#22c55e':pct>=45?'#eab308':'#ef4444'}">
+        ${pct>=75?'✅ Good Standing':pct>=45?'⚠️ At Risk':'❌ Shortage — Attend More'}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function updateStudentStats(records) {
+  safeSet('stat-present', records.length);
+  const subjects=[...new Set(records.map(r=>r.subject))];
+  let totalPct=0;
+  subjects.forEach(s=>{
+    const count=records.filter(r=>r.subject===s).length;
+    totalPct+=Math.min(100,Math.round(count/10*100));
+  });
+  const avg=subjects.length>0?Math.round(totalPct/subjects.length):0;
+  safeSet('stat-pct',avg+'%');
+}
+
+function updateTeacherStats(records) {
+  const today=new Date().toDateString();
+  const todayRec=records.filter(r=>new Date(r.timestamp).toDateString()===today);
+  const unique=new Set(records.map(r=>r.studentId)).size;
+  safeSet('stat-sessions',todayRec.length);
+  safeSet('stat-total',unique);
+  // avg attendance
+  const subjects=[...new Set(records.map(r=>r.subject))];
+  if(subjects.length>0){
+    const totalPct=subjects.reduce((acc,s)=>{
+      const c=records.filter(r=>r.subject===s).length;
+      return acc+Math.min(100,Math.round(c/Math.max(1,unique)*100));
+    },0);
+    safeSet('stat-rate',Math.round(totalPct/subjects.length)+'%');
+  }
+}
+
+// ============================================================
+// ATTENDANCE % COLOR HELPER
+// ============================================================
+function getPctStyle(pct) {
+  if(pct>=75) return {cls:'pct-green',barCls:'green',label:'Good'};
+  if(pct>=45) return {cls:'pct-yellow',barCls:'yellow',label:'At Risk'};
+  return {cls:'pct-red',barCls:'red',label:'Shortage'};
+}
+
+// ============================================================
+// UTILS
+// ============================================================
+function safeSet(id,v){const e=document.getElementById(id);if(e)e.textContent=v;}
+function formatDate(d){return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});}
+function formatTime(d){return d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});}
+function toast(msg,dur=3500){
+  const c=document.getElementById('toast-container');
+  const t=document.createElement('div');t.className='toast';t.textContent=msg;
+  c.appendChild(t);setTimeout(()=>t.remove(),dur);
+}
+
+// ============================================================
+// AUTO-LOGIN
+// ============================================================
+window.addEventListener('load',()=>{
+  updateStorageInfo();
+  try{ const ss=sessionStorage.getItem(SS_STUDENT_KEY); if(ss){const u=JSON.parse(ss);toast('🎒 Welcome back, '+u.displayName+'!');onUserLogin(u);return;} }catch{}
+  try{ const ls=localStorage.getItem(LS_TEACHER_KEY); if(ls){const u=JSON.parse(ls);toast('👩‍🏫 Welcome back, '+u.displayName+'!');onUserLogin(u);return;} }catch{}
+});
+
+if(!DEMO_MODE){
+  auth.onAuthStateChanged(async user=>{
+    if(user){
+      const doc=await db.collection('users').doc(user.uid).get();
+      const u={uid:user.uid,email:user.email,displayName:user.displayName,...doc.data()};
+      if(u.role==='student') saveStudent(u); else saveTeacher(u);
+      onUserLogin(u);
+    }
+  });
+}
+</script>
+</body>
+</html>
